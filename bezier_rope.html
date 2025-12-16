@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive Bezier Rope</title>
+  <style>
+    body { margin: 0; background: #111; }
+    canvas { display: block; margin: 0 auto; background: #222; }
+  </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function bezierPoint(t, P0, P1, P2, P3) {
+  const u = 1 - t;
+  const tt = t * t;
+  const uu = u * u;
+  const uuu = uu * u;
+  const ttt = tt * t;
+
+  const x =
+    uuu * P0.x +
+    3 * uu * t * P1.x +
+    3 * u * tt * P2.x +
+    ttt * P3.x;
+  const y =
+    uuu * P0.y +
+    3 * uu * t * P1.y +
+    3 * u * tt * P2.y +
+    ttt * P3.y;
+  return { x, y };
+}
+
+function bezierTangent(t, P0, P1, P2, P3) {
+  const u = 1 - t;
+  const x =
+    3 * u * u * (P1.x - P0.x) +
+    6 * u * t * (P2.x - P1.x) +
+    3 * t * t * (P3.x - P2.x);
+  const y =
+    3 * u * u * (P1.y - P0.y) +
+    6 * u * t * (P2.y - P1.y) +
+    3 * t * t * (P3.y - P2.y);
+  return { x, y };
+}
+
+function normalize(v) {
+  const len = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / len, y: v.y / len };
+}
+
+let P0 = { x: window.innerWidth * 0.2, y: window.innerHeight * 0.5 };
+let P3 = { x: window.innerWidth * 0.8, y: window.innerHeight * 0.5 };
+
+let P1 = { x: lerp(P0.x, P3.x, 0.33), y: P0.y - 100 };
+let P2 = { x: lerp(P0.x, P3.x, 0.66), y: P3.y + 100 };
+
+let P1Vel = { x: 0, y: 0 };
+let P2Vel = { x: 0, y: 0 };
+
+let P1Target = { x: P1.x, y: P1.y };
+let P2Target = { x: P2.x, y: P2.y };
+
+const k = 0.08;     
+const damping = 0.15;
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  const midX1 = lerp(P0.x, P3.x, 0.33);
+  const midX2 = lerp(P0.x, P3.x, 0.66);
+
+  P1Target.x = midX1;
+  P2Target.x = midX2;
+  P1Target.y = my - 80; 
+  P2Target.y = my + 80;
+});
+
+function updatePoint(pos, vel, target) {
+  const ax = -k * (pos.x - target.x) - damping * vel.x;
+  const ay = -k * (pos.y - target.y) - damping * vel.y;
+
+  vel.x += ax;
+  vel.y += ay;
+
+  pos.x += vel.x;
+  pos.y += vel.y;
+}
+
+function update() {
+  updatePoint(P1, P1Vel, P1Target);
+  updatePoint(P2, P2Vel, P2Target);
+}
+
+function drawCircle(p, r, color) {
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.beginPath();
+  let t = 0;
+  const dt = 0.01;
+  let p = bezierPoint(t, P0, P1, P2, P3);
+  ctx.moveTo(p.x, p.y);
+  for (t = dt; t <= 1.0 + 1e-6; t += dt) {
+    p = bezierPoint(t, P0, P1, P2, P3);
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.strokeStyle = '#00e0ff';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  const tangentStep = 0.1;
+  const tangentLength = 40;
+  ctx.strokeStyle = '#ffcc00';
+  ctx.lineWidth = 1.5;
+  for (let tt = 0; tt <= 1.0001; tt += tangentStep) {
+    const point = bezierPoint(tt, P0, P1, P2, P3);
+    const tan = normalize(bezierTangent(tt, P0, P1, P2, P3));
+    const pA = {
+      x: point.x - tan.x * tangentLength * 0.5,
+      y: point.y - tan.y * tangentLength * 0.5
+    };
+    const pB = {
+      x: point.x + tan.x * tangentLength * 0.5,
+      y: point.y + tan.y * tangentLength * 0.5
+    };
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.stroke();
+  }
+
+  drawCircle(P0, 6, '#ffffff');
+  drawCircle(P3, 6, '#ffffff');
+  drawCircle(P1, 6, '#ff5555');
+  drawCircle(P2, 6, '#ff5555');
+
+  ctx.strokeStyle = '#444';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(P0.x, P0.y);
+  ctx.lineTo(P1.x, P1.y);
+  ctx.lineTo(P2.x, P2.y);
+  ctx.lineTo(P3.x, P3.y);
+  ctx.stroke();
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
